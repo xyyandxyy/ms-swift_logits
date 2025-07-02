@@ -261,9 +261,25 @@ class SwiftInfer(SwiftPipeline):
                 labels = data.pop('label', None)
             labels_list.append(labels)
 
-        resp_list = self.infer(val_dataset, request_config, template=self.template, use_tqdm=True, **self.infer_kwargs)
+        try:
+            resp_list = self.infer(val_dataset, request_config, template=self.template, use_tqdm=True, **self.infer_kwargs)
+            # 正常处理
+        except Exception as e:
+            print(f"[ERROR] batch 推理失败: {e}")
+            print("尝试单条推理以定位问题数据...")
+            resp_list = []
+            for idx, data in enumerate(val_dataset):
+                try:
+                    resp = self.infer([data], request_config, template=self.template, use_tqdm=False, **self.infer_kwargs)[0]
+                    resp_list.append(resp)
+                except Exception as e2:
+                    print(f"[ERROR] 推理第{idx}条数据失败: {e2}")
+                    print(f"[DATA] {data}")
+                    resp_list.append(None)  # 或者直接 continue
         if not (args.infer_backend == 'vllm' and rank >= 0 and args.rank % args.tensor_parallel_size != 0):
             for data, resp, labels in zip(val_dataset, resp_list, labels_list):
+                if resp is None:
+                    continue  # 跳过推理失败的数据
                 response = resp.choices[0].message.content
                 data['messages'].append({'role': 'assistant', 'content': response})
                 data = {'response': response, 'labels': labels, 'logprobs': resp.choices[0].logprobs, **data}
