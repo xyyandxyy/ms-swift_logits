@@ -57,6 +57,7 @@ class RequestConfig:
     stream: bool = False
     logprobs: bool = False
     top_logprobs: Optional[int] = None
+    first_token_interest_ids: Optional[List[int]] = None
 
     n: int = 1
     best_of: Optional[int] = None
@@ -242,11 +243,12 @@ class ChatCompletionResponseChoice:
     message: ChatMessage
     finish_reason: Literal['stop', 'length', None]
     logprobs: Optional[Dict[str, List[Dict[str, Any]]]] = None
+    logits: Optional[List[float]] = None
 
     def to_cmpl_choice(self) -> 'CompletionResponseChoice':
         self = deepcopy(self)
         assert not self.message.tool_calls, f'message: {self.message}'
-        return CompletionResponseChoice(self.index, self.message.content, self.finish_reason, self.logprobs)
+        return CompletionResponseChoice(self.index, self.message.content, self.finish_reason, self.logprobs, self.logits)
 
 
 @dataclass

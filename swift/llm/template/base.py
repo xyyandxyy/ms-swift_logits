@@ -625,6 +625,8 @@ class Template(ProcessorMixin):
         signature = inspect.signature(base_model.generate)
         if 'use_model_defaults' in signature.parameters and 'use_model_defaults' not in kwargs:
             kwargs['use_model_defaults'] = False
+        kwargs['return_dict_in_generate'] = True
+        kwargs['output_scores'] = True
         return model.generate(*args, **kwargs)
 
     def _skip_stop_decode(self, generate_ids: List[int], is_finished: bool, **decode_kwargs) -> Any:

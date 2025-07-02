@@ -36,6 +36,7 @@ class GenerationArguments:
     stop_words: List[str] = field(default_factory=list)
     logprobs: bool = False
     top_logprobs: Optional[int] = None
+    first_token_interest_ids: Optional[List[int]] = None
 
     def get_request_config(self):
         if getattr(self, 'task_type') != 'causal_lm':
@@ -52,4 +53,5 @@ class GenerationArguments:
             stream=self.stream,
             repetition_penalty=self.repetition_penalty,
             logprobs=self.logprobs,
+            first_token_interest_ids=self.first_token_interest_ids,
             top_logprobs=self.top_logprobs)

@@ -363,6 +363,7 @@ class PtEngine(InferEngine):
         generate_kwargs = template.prepare_generate_kwargs(generate_kwargs, model=self.model)
         output = dict(template.generate(self.model, **generate_kwargs))
         output.pop('past_key_values', None)
+        batched_scores = output['scores'][0] # first token logits
         batched_generate_ids = output['sequences']
         batched_generate_ids = template.get_generate_ids(batched_generate_ids, num_prompt_tokens)
         template.debug_logger({'generate_ids': batched_generate_ids})  # debug
@@ -386,7 +387,7 @@ class PtEngine(InferEngine):
                     logprobs_list = [
                         logprobs for m, logprobs in zip(masks, batched_logprobs[batched_index]) if m.item()
                     ]
-
+                logits = batched_scores[i].tolist()
                 logprobs = self._get_logprobs(logprobs_list, generate_ids, generation_config.top_logprobs)
                 usage_info = self._update_usage_info(usage_info, len(generate_ids))
                 response = template.decode(generate_ids, template_inputs=template_inputs[i])
@@ -397,7 +398,8 @@ class PtEngine(InferEngine):
                         index=j,
                         message=ChatMessage(role='assistant', content=response, tool_calls=toolcall),
                         finish_reason=finish_reason,
-                        logprobs=logprobs))
+                        logprobs=logprobs,
+                        logits=logits))
             res.append(ChatCompletionResponse(model=self.model_name, choices=choices, usage=usage_info))
         return res
 
