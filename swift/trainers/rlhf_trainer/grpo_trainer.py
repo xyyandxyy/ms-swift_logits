@@ -870,7 +870,8 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
 
     def _generate_and_score_completions(self, inputs: InputsType) -> InputsType:
 
-        inputs = self._generate_completions(inputs)
+        # inputs是个list, 数量=(gpu数量 x per_device_train_batch_size x steps_per_generation/梯度累计步长), 至少覆盖一个prompt
+        inputs = self._generate_completions(inputs) # 在这里已经生成好了回答了 
         total_rewards_per_func, total_rewards, completions = self._score_completions(inputs)
         mode = 'train' if self.model.training else 'eval'
 
@@ -1109,7 +1110,7 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
         else:
             return self._compute_loss(model, inputs)
 
-    def _compute_loss(self, model, inputs):
+    def _compute_loss(self, model, inputs): # xyy在这里计算loss
         completion_mask = inputs['completion_mask']
         truncated_mask = inputs['truncated_mask']
         # apply the completion_mask to exclude loss and metrics for overlong completions
