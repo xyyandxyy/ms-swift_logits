@@ -228,6 +228,7 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
             'prompt': deque(maxlen=maxlen),
             'completion': deque(maxlen=maxlen),
             'rewards': defaultdict(lambda: deque(maxlen=maxlen)),
+            'videos': deque(maxlen=maxlen),
         }
         # Ensure each process receives a unique seed to prevent duplicate completions when generating with
         # transformers if num_generations exceeds per_device_train_batch_size. We could skip it if we use vLLM, but
@@ -884,8 +885,9 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
         batch_encoded_inputs = self._prepare_batch_inputs(inputs, total_rewards)
         # Log metrics
         messages = [inputs[i]['messages'][:-1] for i in range(len(inputs))]
+        videos = [inputs[i]['videos'] for i in range(len(inputs))]
 
-        self._log_metrics(batch_encoded_inputs, messages, completions, total_rewards, total_rewards_per_func)
+        self._log_metrics(batch_encoded_inputs, messages, completions, total_rewards, total_rewards_per_func, videos)
 
         return batch_encoded_inputs
 
@@ -1052,7 +1054,7 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
 
         return ga_batch_encoded_inputs
 
-    def _log_metrics(self, inputs, messages, completions, rewards, rewards_per_func):
+    def _log_metrics(self, inputs, messages, completions, rewards, rewards_per_func, videos):
         """Log training/evaluation metrics"""
         mode = 'train' if self.model.training else 'eval'
         device = self.accelerator.device
@@ -1086,6 +1088,7 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
         # Log prompt and completion texts
         self._textual_logs['prompt'].extend(self._apply_chat_template_to_messages_list(gather_object(messages)))
         self._textual_logs['completion'].extend(gather_object(completions))
+        self._textual_logs['videos'].extend(gather_object(videos))
         for i, name in enumerate(self.reward_func_names):
             self._textual_logs['rewards'][name].extend(rewards_per_func[:, i].tolist())
 
@@ -1562,8 +1565,8 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
         if self.accelerator.is_main_process and self.log_completions:
             table = {
                 'step': [str(self.state.global_step)] * len(self._textual_logs['prompt']),
-                'prompt': self._textual_logs['prompt'],
                 'completion': self._textual_logs['completion'],
+                'videos': self._textual_logs['videos'],
                 **self._textual_logs['rewards'],
             }
             self.jsonl_writer.append(table)
