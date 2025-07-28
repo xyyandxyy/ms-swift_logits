@@ -1575,7 +1575,7 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
                 df = pd.DataFrame(table)
                 if self.wandb_log_unique_prompts:
                     df = df.drop_duplicates(subset=['prompt'])
-                wandb.log({'completions': wandb.Table(dataframe=df)})
+                wandb.log({f'completions_{self.state.global_step}': wandb.Table(dataframe=df)})
 
     def is_async_generate_eval_rollout_done(self):
         return not self.eval_flag or not self.eval_queue.empty()
