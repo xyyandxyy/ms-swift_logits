@@ -885,7 +885,7 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
         batch_encoded_inputs = self._prepare_batch_inputs(inputs, total_rewards)
         # Log metrics
         messages = [inputs[i]['messages'][:-1] for i in range(len(inputs))]
-        videos = [inputs[i]['videos'] for i in range(len(inputs))]
+        videos = [inputs[i]['videos'][0] for i in range(len(inputs))]
 
         self._log_metrics(batch_encoded_inputs, messages, completions, total_rewards, total_rewards_per_func, videos)
 
@@ -1088,7 +1088,7 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
         # Log prompt and completion texts
         self._textual_logs['prompt'].extend(self._apply_chat_template_to_messages_list(gather_object(messages)))
         self._textual_logs['completion'].extend(gather_object(completions))
-        self._textual_logs['videos'].extend(gather_object(videos[0]))
+        self._textual_logs['videos'].extend(gather_object(videos))
         for i, name in enumerate(self.reward_func_names):
             self._textual_logs['rewards'][name].extend(rewards_per_func[:, i].tolist())
 
