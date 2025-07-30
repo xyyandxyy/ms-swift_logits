@@ -1026,6 +1026,7 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
 
         gas_chunks, advantage_chunks = self.split_by_mini_batches(inputs, advantages)
         ga_batch_encoded_inputs = []
+
         for i, (batch, batch_advantages) in enumerate(zip(gas_chunks, advantage_chunks)):
             # Encode and process each batch (size=bs)
             with self._template_context(template):
@@ -1034,7 +1035,7 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
 
             # Process labels and masks
             labels = batch_encoded_inputs.pop('labels')
-            logits_to_keep = (labels.shape[-1] - (torch.ne(labels, -100).int().argmax(-1))).max().item()
+            logits_to_keep = (labels.shape[-1] - (torch.ne(labels, -100).int().argmax(-1))).max().item() # 计算纯生成部分的长度
             batch_encoded_inputs.update({
                 'completion_mask':
                 labels[:, -logits_to_keep:] != -100,
@@ -1133,9 +1134,9 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
                     ref_per_token_logps = self._get_per_token_logps(self.ref_model, inputs)
                 else:
                     with self.accelerator.unwrap_model(self.model).disable_adapter():
-                        ref_per_token_logps = self._get_per_token_logps(self.model, inputs)
+                        ref_per_token_logps = self._get_per_token_logps(self.model, inputs) # torch.Size([1, 101])
 
-            per_token_kl = (
+            per_token_kl = ( # kl 散度也是per-token的 # torch.Size([1, 101])
                 torch.exp(ref_per_token_logps - per_token_logps) - (ref_per_token_logps - per_token_logps) - 1)
 
         advantages = inputs['advantages']
@@ -1156,7 +1157,7 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
         if self.beta != 0.0:
             per_token_loss = per_token_loss + self.beta * per_token_kl
 
-        if self.loss_type == 'grpo':
+        if self.loss_type == 'grpo': # 这里completion_mask也和per_token_loss一样被截断了, 只保留纯completion部分.
             loss = ((per_token_loss * completion_mask).sum(-1) / completion_mask.sum(-1).clamp(min=1.0)).mean()
         elif self.loss_type == 'bnpo':
             loss = (per_token_loss * completion_mask).sum() / completion_mask.sum().clamp(min=1.0)
@@ -1269,8 +1270,8 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
     @profiling_decorator
     def _get_per_token_logps(self, model, inputs):
         from trl.trainer.utils import selective_log_softmax
-        logits_to_keep = inputs['logits_to_keep']
-        input_ids = inputs['input_ids']
+        logits_to_keep = inputs['logits_to_keep'] # logits_to_keep=101
+        input_ids = inputs['input_ids'] # torch.Size([1, 968])
         unwrapped_model = self.accelerator.unwrap_model(model)
         if is_peft_model(unwrapped_model):
             parameters = inspect.signature(unwrapped_model.base_model.model.forward).parameters
@@ -1291,10 +1292,11 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
         with self._template_context(self.template), self.padding_free_context(model):
             logits = model(**inputs).logits
         # exclude the last logit: it corresponds to the next token pred
-        logits = logits[:, -(logits_to_keep + 1):-1, :]
+        logits = logits[:, -(logits_to_keep + 1):-1, :] # ([1, 968, 152064]) -[1, 101, 152064]就是对每个token都算一下logits
         logits = logits / self.temperature
-        input_ids = input_ids[:, -logits_to_keep:]
-        return selective_log_softmax(logits, input_ids)  # compute logprobs for the input tokens
+        input_ids = input_ids[:, -logits_to_keep:] # 保留最后logits_to_keep个? 
+        return selective_log_softmax(logits, input_ids)  #这个函数等价于先对logits计算log_softmax，然后从结果中按照指定索引提取特定位置的值
+        # 这里input_ids就是index
 
     @profiling_decorator
     def _get_last_hidden_state(self, unwrapped_model, inputs, logits_to_keep):
