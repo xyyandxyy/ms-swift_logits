@@ -1,5 +1,6 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 # Part of the implementation is borrowed from huggingface/transformers.
+import inspect
 import os
 from contextlib import contextmanager, nullcontext
 from functools import wraps
@@ -15,6 +16,7 @@ from transformers import Trainer as HfTrainer
 from transformers.models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from transformers.utils import is_peft_available
 
+from swift.plugin import MeanMetric
 from swift.utils import JsonlWriter, Serializer, gc_collect, get_logger, unwrap_model_for_generation
 from .arguments import Seq2SeqTrainingArguments, TrainingArguments
 from .mixin import DataLoaderMixin, SwiftMixin
@@ -63,6 +65,22 @@ class Trainer(SwiftMixin, HfTrainer):
         return (loss, outputs) if return_outputs else loss
 
 
+def gather_for_unpadded_tensors(input_data, use_gather_object=False):
+    from accelerate.utils import gather_object
+    input_data = gather_object(input_data)
+    output = []
+    for _data in input_data:
+        if len(_data.shape) == 0:
+            _data = _data.unsqueeze(0)
+        _data = _data.cpu()
+        output.append(_data)
+    if len(output[0].shape) == 1 and output[0].shape[0] > 1:
+        data = torch.stack(output, dim=0)
+    else:
+        data = torch.concat(output, dim=0)
+    return data
+
+
 class EmbeddingTrainer(Trainer):
 
     def __init__(self, *args, **kwargs):
@@ -70,6 +88,12 @@ class EmbeddingTrainer(Trainer):
         self.compute_metrics = self.calculate_metric
         self.preprocess_logits_for_metrics = None
         self.label_names = ['labels']
+        self.gather_function = gather_for_unpadded_tensors
+
+    def evaluation_loop(self, *args, **kwargs):
+        output = super().evaluation_loop(*args, **kwargs)
+        self.gather_function = gather_for_unpadded_tensors
+        return output
 
     def calculate_metric(self, eval_prediction: EvalPrediction) -> Dict[str, float]:
         from swift.plugin.loss import infonce_loss, calculate_paired_metrics, calculate_infonce_metrics
@@ -95,6 +119,7 @@ class RerankerTrainer(Trainer):
             self.preprocess_logits_for_metrics = self._preprocess_generative_reranker_logits
         else:
             self.preprocess_logits_for_metrics = None
+        self.gather_function = gather_for_unpadded_tensors
 
     def _preprocess_generative_reranker_logits(self, logits, labels):
         """
@@ -132,6 +157,11 @@ class RerankerTrainer(Trainer):
         else:
             # Unexpected shape, return as-is
             return logits
+
+    def evaluation_loop(self, *args, **kwargs):
+        output = super().evaluation_loop(*args, **kwargs)
+        self.gather_function = gather_for_unpadded_tensors
+        return output
 
     def calculate_metric(self, eval_prediction: EvalPrediction) -> Dict[str, float]:
         from swift.plugin.loss import (get_loss_func, LossType, calculate_reranker_metrics)
@@ -216,9 +246,15 @@ class Seq2SeqTrainer(SwiftMixin, DataLoaderMixin, HfSeq2SeqTrainer):
     def _patch_predict_with_generate(self):
         origin_data_collator = self.data_collator
         self.data_collator = self._predict_data_collator
+        _packing = self.template._packing
+        padding_free = self.template.padding_free
+        self.template._packing = False
+        self.template.padding_free = False
         try:
             yield
         finally:
+            self.template._packing = _packing
+            self.template.padding_free = padding_free
             self.data_collator = origin_data_collator
 
     def evaluate(self, *args, **kwargs):
@@ -237,8 +273,10 @@ class Seq2SeqTrainer(SwiftMixin, DataLoaderMixin, HfSeq2SeqTrainer):
         **gen_kwargs,
     ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         if not self.args.predict_with_generate or prediction_loss_only:
-            return super().prediction_step(
-                model, inputs, prediction_loss_only=prediction_loss_only, ignore_keys=ignore_keys)
+            inputs['_position_ids'] = inputs.get('position_ids')
+            with self.template.forward_context(self.model, inputs):
+                return super().prediction_step(
+                    model, inputs, prediction_loss_only=prediction_loss_only, ignore_keys=ignore_keys)
         from swift.llm import RequestConfig, InferRequest
         data_list = inputs['_data']
         labels_list = [InferRequest.remove_response(data['messages']) for data in data_list]
@@ -264,10 +302,10 @@ class Seq2SeqTrainer(SwiftMixin, DataLoaderMixin, HfSeq2SeqTrainer):
         labels_list = pad_sequence(labels_list, batch_first=True, padding_value=0)
         return None, response_list, labels_list
 
-    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+    def _prepare_inputs(self, inputs):
+        inputs = super()._prepare_inputs(inputs)
         from swift.plugin.loss import get_loss_func
         loss_kwargs = {}
-        labels = None
         compute_loss_func = self.compute_loss_func
         loss_scale = inputs.pop('loss_scale', None)
         if loss_scale is not None:
@@ -276,26 +314,58 @@ class Seq2SeqTrainer(SwiftMixin, DataLoaderMixin, HfSeq2SeqTrainer):
                 compute_loss_func = get_loss_func('loss_scale')
 
         sample_channels = inputs.pop('channel', None)
-        if sample_channels is not None and self.args.channels is not None:
+        position_ids = inputs.pop('_position_ids', None)
+        if self.args.channels is not None:
+            assert sample_channels is not None, f'sample_channels: {sample_channels}'
             state = self.state
             setattr(state, 'local_step', getattr(state, 'local_step', 0))
             setattr(state, 'ch_loss_steps', getattr(state, 'ch_loss_steps', {}))
 
             loss_kwargs['sample_channels'] = sample_channels
             loss_kwargs['trainer'] = self
-            if inputs.get('position_ids') is not None:
-                loss_kwargs['position_ids'] = inputs['position_ids']
+            if position_ids is None:
+                position_ids = inputs.get('position_ids')
+            if position_ids is not None:
+                loss_kwargs['position_ids'] = position_ids
 
-        if (self.label_smoother is not None or compute_loss_func is not None) and 'labels' in inputs:
-            labels = inputs.pop('labels')
-
-        use_logits_to_keep = self.get_use_logits_to_keep('labels' in inputs)
+        use_logits_to_keep = self.get_use_logits_to_keep('labels' in inputs and self.label_smoother is None
+                                                         and compute_loss_func is None)
         if use_logits_to_keep:
             inputs['labels'], logits_to_keep = self.get_logits_to_keep(inputs['labels'])
             if logits_to_keep is not None:
                 inputs['logits_to_keep'] = logits_to_keep
-        with self.template.compute_loss_context(self.model, inputs):
-            outputs = model(**inputs)
+                if self.args.tuner_backend == 'unsloth' and isinstance(logits_to_keep, torch.Tensor):
+                    inputs['logits_to_keep'] = int(logits_to_keep.sum())
+
+        if self.model.model_info.is_moe_model:
+            base_model = self.template.get_base_model(self.model)
+            router_aux_loss_coef = self.args.router_aux_loss_coef
+            if router_aux_loss_coef is None:
+                router_aux_loss_coef = getattr(base_model.config, 'router_aux_loss_coef', None)
+            if router_aux_loss_coef is not None:
+                from swift.llm import HfConfigFactory
+                HfConfigFactory.set_config_attr(base_model.config, 'router_aux_loss_coef', router_aux_loss_coef)
+                base_model.router_aux_loss_coef = router_aux_loss_coef
+                logger.info_once(f'router_aux_loss_coef: {router_aux_loss_coef}')
+                if router_aux_loss_coef > 0 and 'output_router_logits' in inspect.signature(
+                        base_model.forward).parameters:
+                    inputs['output_router_logits'] = True
+        inputs['compute_loss_func'] = compute_loss_func
+        inputs['loss_kwargs'] = loss_kwargs
+        return inputs
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        labels = None
+        compute_loss_func = inputs.pop('compute_loss_func', None)
+        loss_kwargs = inputs.pop('loss_kwargs', {})
+
+        if (self.label_smoother is not None or compute_loss_func is not None) and 'labels' in inputs:
+            labels = inputs.pop('labels')
+        outputs = model(**inputs)
+        if getattr(outputs, 'aux_loss', None) is not None:
+            if 'aux_loss' not in self._custom_metrics:
+                self._custom_metrics['aux_loss'] = MeanMetric(nan_value=None)
+            self._custom_metrics['aux_loss'].update(outputs.aux_loss)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
         if self.args.past_index >= 0:
@@ -335,7 +405,14 @@ class Seq2SeqTrainer(SwiftMixin, DataLoaderMixin, HfSeq2SeqTrainer):
         if getattr(self.args, 'average_tokens_across_devices', False) and self.model_accepts_loss_kwargs:
             loss *= self.accelerator.num_processes
 
-        if outputs.logits is not None and labels is not None and not return_outputs:
+        if (outputs.logits is not None and labels is not None and not return_outputs
+                and self.args.tuner_backend != 'unsloth'):
             # Liger does not have logits
+            # Unsloth has a bug with output logits
             self._compute_acc(outputs, labels)
         return (loss, outputs) if return_outputs else loss
+
+    def training_step(self, model, inputs, *args, **kwargs):
+        inputs['_position_ids'] = inputs.get('position_ids')
+        with self.template.forward_context(self.model, inputs):
+            return super().training_step(model, inputs, *args, **kwargs)

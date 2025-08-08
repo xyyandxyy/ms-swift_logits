@@ -68,9 +68,11 @@
 - 🍉 **工具箱能力**：不仅提供大模型和多模态大模型的训练支持，还涵盖其推理、评测、量化和部署全流程。
 - **推理加速**：支持PyTorch、vLLM、SGLang和LmDeploy推理加速引擎，并提供OpenAI接口，为推理、部署和评测模块提供加速。
 - **模型评测**：以EvalScope作为评测后端，支持100+评测数据集对纯文本和多模态模型进行评测。
-- **模型量化**：支持AWQ、GPTQ和BNB的量化导出，导出的模型支持使用vLLM/SGLang/LmDeploy推理加速，并支持继续训练。
+- **模型量化**：支持AWQ、GPTQ、FP8和BNB的量化导出，导出的模型支持使用vLLM/SGLang/LmDeploy推理加速，并支持继续训练。
 
 ## 🎉 新闻
+- 🎁 2025.07.12: 支持部署Embedding模型的部署(pt/vLLM/SGLang), 查看[这里](examples/deploy/embedding/client.py).
+- 🎁 2025.07.09: Megatron-SWIFT支持LoRA训练。相比ms-swift，在MoE模型提速显著。训练脚本参考[这里](https://github.com/modelscope/ms-swift/blob/main/examples/train/megatron/lora)。
 - 🎁 2025.06.23: 支持Reranker模型训练，训练脚本参考[这里](https://github.com/modelscope/ms-swift/blob/main/examples/train/reranker/train_reranker.sh)。
 - 🎁 2025.06.18: 支持使用[sglang](https://github.com/sgl-project/sglang)推理加速引擎对ms-swift[推理](https://github.com/modelscope/ms-swift/blob/main/examples/infer/sglang)/部署/评测/ui模块进行加速，设置`--infer_backend sglang`即可。
 - 🎁 2025.06.15: 支持对纯文本大模型和多模态模型进行GKD训练。训练脚本参考这里：[纯文本](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/gkd), [多模态](https://github.com/modelscope/ms-swift/blob/main/examples/train/multimodal/rlhf/gkd)。
@@ -112,20 +114,22 @@ pip install -e .
 
 运行环境：
 
-|        | 范围           | 推荐 | 备注 |
-| ------ |--------------| ---- | --|
-| python | >=3.9        | 3.10 ||
-| cuda |              | cuda12 |使用cpu、npu、mps则无需安装|
-| torch | >=2.0        |  ||
-| transformers | >=4.33       | 4.51.3 ||
-| modelscope | >=1.23       |  ||
-| peft | >=0.11,<0.16 | ||
-| trl | >=0.13,<0.19 | 0.18 |RLHF|
-| deepspeed | >=0.14       | 0.16.9 |训练|
-| vllm | >=0.5.1      | 0.8.5.post1 |推理/部署/评测|
-| sglang |     | 0.4.6.post5 |推理/部署/评测|
-| lmdeploy | >=0.5,<0.9      | 0.8 |推理/部署/评测|
-| evalscope | >=0.11       | |评测|
+|              | 范围           | 推荐                  | 备注                 |
+|--------------|--------------|---------------------|--------------------|
+| python       | >=3.9        | 3.10                |                    |
+| cuda         |              | cuda12              | 使用cpu、npu、mps则无需安装 |
+| torch        | >=2.0        | 2.7.1               |                    |
+| transformers | >=4.33       | 4.54.1              |                    |
+| modelscope   | >=1.23       |                     |                    |
+| peft         | >=0.11,<0.17 |                     |                    |
+| flash_attn   |              | 2.7.4.post1/3.0.0b1 |                    |
+| trl          | >=0.15,<0.21 | 0.20.0              | RLHF               |
+| deepspeed    | >=0.14       | 0.16.9              | 训练                 |
+| vllm         | >=0.5.1      | 0.10                | 推理/部署              |
+| sglang       | >=0.4.6      | 0.4.9.post6         | 推理/部署              |
+| lmdeploy     | >=0.5,<0.9   | 0.8                 | 推理/部署              |
+| evalscope    | >=0.11       |                     | 评测                 |
+| gradio       |              | 5.32.1              | Web-UI/App         |
 
 更多可选依赖可以参考[这里](https://github.com/modelscope/ms-swift/blob/main/requirements/install_all.sh)。
 
@@ -191,7 +195,7 @@ swift infer \
     --stream true \
     --merge_lora true \
     --infer_backend vllm \
-    --max_model_len 8192 \
+    --vllm_max_model_len 8192 \
     --temperature 0 \
     --max_new_tokens 2048
 ```

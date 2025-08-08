@@ -142,10 +142,12 @@ Grounded Operation: CLICK(box=[[346,574,424,710]], element_type='卡片', elemen
 
 
 def test_minicpmv():
-    pt_engine = PtEngine('OpenBMB/MiniCPM-V-2_6')
-    _infer_model(pt_engine)
-    pt_engine.default_template.template_backend = 'jinja'
-    _infer_model(pt_engine)
+    # pt_engine = PtEngine('OpenBMB/MiniCPM-V-2_6')
+    messages = [{'role': 'user', 'content': '<image>descibe the picture?'}]
+    pt_engine = PtEngine('OpenBMB/MiniCPM-V-4')
+    response = _infer_model(pt_engine, messages=messages)
+    assert response[:100] == ('The image features a close-up of a kitten with a soft and fluffy appearance. '
+                              'The kitten has a striki')
 
 
 def test_minicpmo():
@@ -217,13 +219,14 @@ def test_florence():
     pt_engine = PtEngine('AI-ModelScope/Florence-2-base-ft')
     _infer_model(pt_engine, messages=[{'role': 'user', 'content': 'who are you?'}], images=[])
 
-    _infer_model(
+    response = _infer_model(
         pt_engine,
         messages=[{
             'role': 'user',
             'content': '<OD>'
         }],
         images=['http://modelscope-open.oss-cn-hangzhou.aliyuncs.com/images/animal.png'])
+    print(f'response: {response}')
 
 
 def test_phi3_vision():
@@ -578,6 +581,32 @@ def test_glm4_1v():
         assert response == response2
 
 
+def test_gemma3n():
+    pt_engine = PtEngine('google/gemma-3n-E2B-it')
+    messages = [{'role': 'user', 'content': '<image><image>What is the difference between the two images?'}]
+    images = [
+        'http://modelscope-open.oss-cn-hangzhou.aliyuncs.com/images/cat.png',
+        'http://modelscope-open.oss-cn-hangzhou.aliyuncs.com/images/animal.png'
+    ]
+    response = _infer_model(pt_engine, messages=messages, images=images)
+    pt_engine.default_template.template_backend = 'jinja'
+    response2 = _infer_model(pt_engine, messages=messages, images=images)
+    assert response == response2
+
+
+def test_keye_vl():
+    pt_engine = PtEngine('Kwai-Keye/Keye-VL-8B-Preview')
+    messages = [{'role': 'user', 'content': '<image><image>What is the difference between the two images?'}]
+    images = [
+        'http://modelscope-open.oss-cn-hangzhou.aliyuncs.com/images/cat.png',
+        'http://modelscope-open.oss-cn-hangzhou.aliyuncs.com/images/animal.png'
+    ]
+    response = _infer_model(pt_engine, messages=messages, images=images)
+    pt_engine.default_template.template_backend = 'jinja'
+    response2 = _infer_model(pt_engine, messages=messages, images=images)
+    assert response == response2
+
+
 if __name__ == '__main__':
     from swift.llm import PtEngine, RequestConfig
     from swift.utils import get_logger, seed_everything
@@ -600,7 +629,7 @@ if __name__ == '__main__':
     # test_glm4v()
     # test_cogagent()
     # test_llava_onevision_hf()
-    # test_minicpmv()
+    test_minicpmv()
     # test_got_ocr()
     # test_got_ocr_hf()
     # test_paligemma()
@@ -632,4 +661,6 @@ if __name__ == '__main__':
     # test_internvl3_9b()
     # test_kimi_vl()
     # test_kimi_vl_thinking()
-    test_glm4_1v()
+    # test_glm4_1v()
+    # test_gemma3n()
+    # test_keye_vl()

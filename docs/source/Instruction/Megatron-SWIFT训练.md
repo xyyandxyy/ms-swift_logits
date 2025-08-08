@@ -1,7 +1,7 @@
 
 # Megatron-SWIFT训练
 
-SWIFT引入了Megatron的并行技术来加速大模型的训练，包括数据并行、张量并行、流水线并行、序列并行，上下文并行，专家并行。支持Qwen3、[Qwen3-MoE](https://github.com/modelscope/ms-swift/blob/main/examples/train/megatron/qwen3_moe.sh)、Qwen2.5、Llama3、Deepseek-R1蒸馏系等模型的预训练和微调。完整支持的模型可以参考[支持的模型与数据集文档](./支持的模型和数据集.md)。
+SWIFT引入了Megatron的并行技术来加速大模型的训练，包括数据并行、张量并行、流水线并行、序列并行，上下文并行，专家并行。支持Qwen3、[Qwen3-MoE](https://github.com/modelscope/ms-swift/blob/main/examples/train/megatron/qwen3_moe.sh)、Qwen2.5、Llama3、Deepseek-R1等模型的预训练和微调。完整支持的模型可以参考[支持的模型与数据集文档](./支持的模型和数据集.md)。
 
 ## 环境准备
 使用Megatron-SWIFT，除了安装swift依赖外，还需要安装以下内容：
@@ -9,9 +9,12 @@ SWIFT引入了Megatron的并行技术来加速大模型的训练，包括数据�
 ```shell
 # 推荐torch版本：2.5 / 2.6
 pip install pybind11
+
 # transformer_engine
 # 若出现安装错误，可以参考该issue解决: https://github.com/modelscope/ms-swift/issues/3793
-pip install git+https://github.com/NVIDIA/TransformerEngine.git@release_v2.3
+pip install --no-build-isolation transformer_engine[pytorch]
+# 或使用以下方式安装
+# pip install --no-build-isolation git+https://github.com/NVIDIA/TransformerEngine.git@release_v2.5#egg=transformer_engine[pytorch]
 
 # apex
 git clone https://github.com/NVIDIA/apex
@@ -21,17 +24,39 @@ git checkout e13873debc4699d39c6861074b9a3b2a02327f92
 pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation --config-settings "--build-option=--cpp_ext" --config-settings "--build-option=--cuda_ext" ./
 
 # megatron-core
-pip install git+https://github.com/NVIDIA/Megatron-LM.git@core_r0.12.0
+pip install git+https://github.com/NVIDIA/Megatron-LM.git@core_r0.13.0
+
+# 若使用多机训练，请额外设置`MODELSCOPE_CACHE`环境变量为共享存储路径
+# 这将确保数据集缓存共享，而加速预处理速度
+expert MODELSCOPE_CACHE='/xxx/shared'
+
+# Megatron-LM
+# 依赖库Megatron-LM中的训练模块将由swift进行git clone并安装。你也可以通过环境变量`MEGATRON_LM_PATH`指向已经下载好的repo路径（断网环境，[core_r0.13.0分支](https://github.com/NVIDIA/Megatron-LM/tree/core_r0.13.0)）。
+export MEGATRON_LM_PATH='/xxx/Megatron-LM'
 ```
 
 或者你也可以使用镜像：
 ```
-modelscope-registry.cn-hangzhou.cr.aliyuncs.com/modelscope-repo/modelscope:ubuntu22.04-cuda12.4.0-py311-torch2.6.0-vllm0.8.5.post1-modelscope1.27.0-swift3.5.1
-modelscope-registry.cn-beijing.cr.aliyuncs.com/modelscope-repo/modelscope:ubuntu22.04-cuda12.4.0-py311-torch2.6.0-vllm0.8.5.post1-modelscope1.27.0-swift3.5.1
-modelscope-registry.us-west-1.cr.aliyuncs.com/modelscope-repo/modelscope:ubuntu22.04-cuda12.4.0-py311-torch2.6.0-vllm0.8.5.post1-modelscope1.27.0-swift3.5.1
+modelscope-registry.cn-hangzhou.cr.aliyuncs.com/modelscope-repo/modelscope:ubuntu22.04-cuda12.4.0-py310-torch2.6.0-vllm0.8.5.post1-modelscope1.28.1-swift3.6.4
+modelscope-registry.cn-beijing.cr.aliyuncs.com/modelscope-repo/modelscope:ubuntu22.04-cuda12.4.0-py310-torch2.6.0-vllm0.8.5.post1-modelscope1.28.1-swift3.6.4
+modelscope-registry.us-west-1.cr.aliyuncs.com/modelscope-repo/modelscope:ubuntu22.04-cuda12.4.0-py310-torch2.6.0-vllm0.8.5.post1-modelscope1.28.1-swift3.6.4
 ```
 
-依赖库Megatron-LM中的训练模块将由swift进行git clone并安装。你也可以通过环境变量`MEGATRON_LM_PATH`指向已经下载好的repo路径（断网环境，[core_r0.12.0分支](https://github.com/NVIDIA/Megatron-LM/tree/core_r0.12.0)）。
+推荐运行环境：
+|              | 范围           | 推荐          | 备注                 |
+|--------------|--------------|-------------|--------------------|
+| python       | >=3.9        | 3.10        |                    |
+| cuda         |              | cuda12      |                    |
+| torch        | >=2.0        | 2.6.0       |                    |
+| transformer_engine    | >=2.3       | 2.5      |                  |
+| apex |   |  0.1 | |
+| megatron_core    | >=0.12       | 0.13      |                  |
+| flash_attn    |        | 2.7.4.post1/3.0.0b1   |                  |
+| transformers | >=4.33       | 4.51.3      |                    |
+| modelscope   | >=1.23       |             |                    |
+| peft         | >=0.11,<0.17 |             |      LoRA          |
+| trl          | >=0.15,<0.21 |       |      RLHF        |
+| deepspeed    | >=0.14       | 0.16.9      |                  |
 
 
 ## 快速入门案例
@@ -39,19 +64,22 @@ modelscope-registry.us-west-1.cr.aliyuncs.com/modelscope-repo/modelscope:ubuntu2
 这里介绍使用2卡80GiB A100对Qwen2.5-7B-Instruct模型进行自我认知微调的快速入门案例，以下最佳实践可以在10分钟内完成。
 
 首先，我们需要将HF格式的权重转为Megatron格式：
-- 若出现OOM，将`CUDA_VISIBLE_DEVICES=0`删除即可。
+- 若出现OOM，将`CUDA_VISIBLE_DEVICES=0`删除即可，会自动使用多卡。若出现内存不足，请将`--test_convert_precision true`删除。
+- `--test_convert_precision`在MoE转换时所需时间较长，可酌情去除。
 ```shell
 CUDA_VISIBLE_DEVICES=0 \
 swift export \
     --model Qwen/Qwen2.5-7B-Instruct \
     --to_mcore true \
     --torch_dtype bfloat16 \
-    --output_dir Qwen2.5-7B-Instruct-mcore
+    --output_dir Qwen2.5-7B-Instruct-mcore \
+    --test_convert_precision true
 ```
 
 然后，使用以下脚本进行训练，训练所需显存资源为2*80GiB：
 - 若使用多机训练，建议共享磁盘，并将`--save`指定为相同的路径。
 ```shell
+PYTORCH_CUDA_ALLOC_CONF='expandable_segments:True' \
 NPROC_PER_NODE=2 \
 CUDA_VISIBLE_DEVICES=0,1 \
 megatron sft \
@@ -86,14 +114,15 @@ megatron sft \
 
 最后，将Megatron格式权重转为HF格式：
 - 注意：`--mcore_model`请指向`iter_xxx`的上级目录。默认会使用`latest_checkpointed_iteration.txt`中对应的checkpoint。
-
+- 若出现OOM，将`CUDA_VISIBLE_DEVICES=0`删除即可。若出现内存不足，请将`--test_convert_precision true`删除。
 ```shell
 CUDA_VISIBLE_DEVICES=0 \
 swift export \
     --mcore_model megatron_output/Qwen2.5-7B-Instruct/vx-xxx \
     --to_hf true \
     --torch_dtype bfloat16 \
-    --output_dir megatron_output/Qwen2.5-7B-Instruct/vx-xxx-hf
+    --output_dir megatron_output/Qwen2.5-7B-Instruct/vx-xxx-hf \
+    --test_convert_precision true
 ```
 
 我们对生成的HF格式权重进行推理：
@@ -116,6 +145,67 @@ I am a language model developed by swift, you can call me swift-robot. How can I
 - **更多案例**：包括packing、多机、32K上下文、DPO、MoE模型、预训练，可以查看[这里](https://github.com/modelscope/ms-swift/tree/main/examples/train/megatron)。
 - 自定义数据集格式和ms-swift相同，参考[自定义数据集文档](../Customization/自定义数据集.md)。
 
+## LoRA训练
+
+Qwen3-235B-A22B-Instruct-250718 单机8卡H20 LoRA训练的最佳实践参考：[https://github.com/modelscope/ms-swift/pull/5033](https://github.com/modelscope/ms-swift/pull/5033)。
+
+相比全参数训练，LoRA训练在训练和MCore转换HF脚本有所区别：
+
+训练脚本：
+```bash
+# full: 2 * 70GiB 0.61s/it
+# lora: 2 * 14GiB 0.45s/it
+PYTORCH_CUDA_ALLOC_CONF='expandable_segments:True' \
+NPROC_PER_NODE=2 \
+CUDA_VISIBLE_DEVICES=0,1 \
+megatron sft \
+    --load Qwen2.5-7B-Instruct-mcore \
+    --dataset 'AI-ModelScope/alpaca-gpt4-data-zh#500' \
+              'AI-ModelScope/alpaca-gpt4-data-en#500' \
+              'swift/self-cognition#500' \
+    --train_type lora \
+    --lora_rank 8 \
+    --lora_alpha 32 \
+    --target_modules all-linear \
+    --tensor_model_parallel_size 2 \
+    --sequence_parallel true \
+    --micro_batch_size 16 \
+    --global_batch_size 16 \
+    --recompute_granularity full \
+    --recompute_method uniform \
+    --recompute_num_layers 1 \
+    --finetune true \
+    --cross_entropy_loss_fusion true \
+    --lr 1e-4 \
+    --lr_warmup_fraction 0.05 \
+    --min_lr 1e-5 \
+    --max_epochs 1 \
+    --save megatron_output/Qwen2.5-7B-Instruct \
+    --save_interval 100 \
+    --max_length 2048 \
+    --system 'You are a helpful assistant.' \
+    --num_workers 4 \
+    --no_save_optim true \
+    --no_save_rng true \
+    --dataset_num_proc 4 \
+    --model_author swift \
+    --model_name swift-robot
+```
+- MoE模型的LoRA训练脚本参考[这里](https://github.com/modelscope/ms-swift/tree/main/examples/train/megatron/lora)。
+
+MCore转换HF脚本：
+```bash
+CUDA_VISIBLE_DEVICES=0 \
+swift export \
+    --mcore_adapters megatron_output/Qwen2.5-7B-Instruct/vx-xxx \
+    --to_hf true \
+    --torch_dtype bfloat16 \
+    --output_dir megatron_output/Qwen2.5-7B-Instruct/vx-xxx-hf \
+    --test_convert_precision true
+```
+- 注意：`mcore_adapters`文件夹中包含`args.json`文件，转换过程中会读取文件中`mcore_model`和LoRA相关的参数信息，并将`mcore_model`和`mcore_adapters`进行merge-lora成完整权重，最终转换成HF格式权重。
+
+
 ## Benchmark
 
 使用`megatron sft`和`swift sft`在单机八卡A800环境下进行Dense/MoE模型全参数训练的速度对比如下，对应脚本参考[这里](https://github.com/modelscope/ms-swift/tree/main/examples/train/megatron/benchmark)。
@@ -131,8 +221,8 @@ I am a language model developed by swift, you can call me swift-robot. How can I
 
 |          | Megatron-LM | Deepspeed-ZeRO2 | Deepspeed-ZeRO3 |
 | -------- | ----------- | ---------- | ---------- |
-| 训练速度 |      2.93s/it       |  6.02s/it   | 24.30s/it |
-| 显存占用 | 8\*66GB     |  8\*72GB   | 8\*50GB |
+| 训练速度 |      2.95s/it       |  6.02s/it   | 24.30s/it |
+| 显存占用 | 8\*57GB     |  8\*72GB   | 8\*50GB |
 
 
 ## 命令行参数
@@ -146,7 +236,7 @@ I am a language model developed by swift, you can call me swift-robot. How can I
 - 🔥recompute_granularity: 重新计算激活的粒度，可选项为'full', 'selective'。其中full代表重新计算整个transformer layer，selective代表只计算transformer layer中的核心注意力部分。通常'selective'是推荐的。默认为'selective'。
 - 🔥recompute_method: 该参数需将recompute_granularity设置为'full'才生效，可选项为'uniform', 'block'。默认为None。
 - 🔥recompute_num_layers: 该参数需将recompute_granularity设置为'full'才生效，默认为None。若`recompute_method`设置为uniform，该参数含义为每个均匀划分的重新计算单元的transformer layers数量。例如你可以指定为`--recompute_granularity full --recompute_method uniform --recompute_num_layers 4`。recompute_num_layers越大，显存占用越小，计算成本越大。默认为None。
-- recompute_modules: 选项包括"core_attn", "moe_act", "layernorm", "mla_up_proj", "mlp", "moe" ，默认值为，["core_attn"]。例如在MoE训练时，你可以通过指定`--recompute_granularity selective --recompute_modules core_attn moe`降低显存。其中"core_attn"、"mlp" 和 "moe" 使用常规检查点，"moe_act"、"layernorm" 和 "mla_up_proj" 使用输出丢弃检查点。
+- recompute_modules: 选项包括"core_attn", "moe_act", "layernorm", "mla_up_proj", "mlp", "moe"，默认值为`["core_attn"]`。该参数在`--recompute_granularity selective`时生效。例如在MoE训练时，你可以通过指定`--recompute_granularity selective --recompute_modules core_attn moe`降低显存。其中"core_attn"、"mlp" 和 "moe" 使用常规检查点，"moe_act"、"layernorm" 和 "mla_up_proj" 使用输出丢弃检查点。
   - "core_attn"：重新计算 Transformer 层中的核心注意力部分。
   - "mlp"：重新计算密集的 MLP 层。
   - "moe"：重新计算 MoE 层。
@@ -165,7 +255,10 @@ I am a language model developed by swift, you can call me swift-robot. How can I
 - 🔥cross_entropy_loss_fusion: 启动交叉熵损失计算融合。默认为False。
 - cross_entropy_fusion_impl: 交叉熵损失融合的实现。可选为'native'和'te'。默认为'native'。
 - calculate_per_token_loss: 根据全局批次中的非填充token数量来对交叉熵损失进行缩放。默认为True。
-- 🔥attention_backend: 使用的注意力后端 (flash、fused、unfused、local、auto)。默认为 auto。
+  - 注意：rlhf中默认为False。
+- 🔥attention_backend: 使用的注意力后端 (flash、fused、unfused、local、auto)。默认为 flash。
+  - 注意：推荐flash_attn版本：2.7.4.post1。在"ms-swift<3.7"默认为'auto'。
+  - 如果安装'flash_attention_3'，则优先使用fa3。训练脚本参考[这里](https://github.com/modelscope/ms-swift/tree/main/examples/train/flash_attention_3)。
 - optimizer: 优化器类型，可选为'adam'、'sgd'。默认为adam。
 - 🔥optimizer_cpu_offload: 将优化器状态卸载到 CPU。默认为False。
 - optimizer_offload_fraction: 卸载到 CPU 的优化器状态所占比例。默认为1.。
@@ -182,11 +275,10 @@ I am a language model developed by swift, you can call me swift-robot. How can I
   - 注意：若设置`--streaming true`，则设置为1。
 - seq_length: 默认为None，即设置为`max_length`。对数据集长度进行限制请使用基本参数中的`--max_length`控制，无需设置此参数。
 - use_cpu_initialization: 在cpu上初始化权重，默认为False。在进行HF和MCore权重转换时会被使用。
-- no_create_attention_mask_in_dataloader: 在dataloader中不创建attention mask，默认为True。
 - extra_megatron_kwargs: 传入megatron的其他参数，使用json传递。默认为None。
 
 **学习率参数**:
-- 🔥lr: 初始学习率，最终会根据学习率预热策略和衰减策略决定每个迭代的学习率，默认为1e-5。
+- 🔥lr: 初始学习率，最终会根据学习率预热策略和衰减策略决定每个迭代的学习率。默认为None，全参数训练默认为1e-5，LoRA训练默认为1e-4。
 - lr_decay_style: 学习率衰减策略，默认为'cosine'。通常设置为'cosine', 'linear', 'constant'。
 - 🔥lr_decay_iters: 学习率衰减的迭代次数。默认为None，则设置为`--train_iters`。
 - lr_warmup_iters: 线性学习率预热的迭代次数，默认为0。
@@ -209,9 +301,12 @@ I am a language model developed by swift, you can call me swift-robot. How can I
 - 🔥no_save_optim: 不保存optimizer，默认为False。
 - 🔥no_save_rng: 不保存rng，默认为False。
 - 🔥load: 加载的checkpoint目录，默认None。
+  - 注意：若未使用ms-swift提供的`swift export`进行权重转换，你需要额外设置`--model <hf-repo>`用于加载`config.json`配置文件。
 - 🔥no_load_optim: 不载入optimizer，默认为False。
 - 🔥no_load_rng: 不载入rng，默认为False。
 - 🔥finetune: 将模型加载并微调。不加载检查点的优化器和随机种子状态，并将迭代数设置为0。默认为False。
+  - 注意：断点续训`--load`，若设置`--finetune true`，将不会跳过数据集；若不设置，将跳过之前训练的数据集数量。
+  - 流式数据集`--streaming`，暂不支持跳过数据集。
 - ckpt_format: checkpoint的格式。可选为'torch', 'torch_dist', 'zarr'。默认为'torch_dist'。
 - no_initialization: 不对权重进行初始化，默认为True。
 - auto_detect_ckpt_format: 自动检测ckpt format为legacy还是distributed格式。默认为True。
@@ -224,11 +319,11 @@ I am a language model developed by swift, you can call me swift-robot. How can I
 - 🔥pipeline_model_parallel_size: pp数，默认为1。
 - 🔥decoder_first_pipeline_num_layers: decoder第一个流水线阶段所包含的Transformer层数。默认为 None，表示将Transformer层数平均分配到所有流水线阶段。
 - 🔥decoder_last_pipeline_num_layers: decoder最后一个流水线阶段所包含的Transformer层数。默认为 None，表示将Transformer层数平均分配到所有流水线阶段。
-- 🔥sequence_parallel: 启动序列并行的优化器。默认为False。
+- 🔥sequence_parallel: 启动序列并行优化，该参数需要设置`tensor_model_parallel_size`才生效。默认为False。
 - 🔥context_parallel_size: cp数，默认为1。
 - tp_comm_overlap: 启用张量并行通信与GEMM（通用矩阵乘法）内核的重叠（降低通信耗时）。默认为False。
-- overlap_grad_reduce: 启用DDP中grad reduce操作的重叠（降低DP通信耗时）。默认为False。
-- overlap_param_gather: 启用分布式优化器中参数all-gather的重叠（降低DP通信耗时）。默认为False。
+- 🔥overlap_grad_reduce: 启用DDP中grad reduce操作的重叠（降低DP通信耗时）。默认为False。
+- 🔥overlap_param_gather: 启用分布式优化器中参数all-gather的重叠（降低DP通信耗时）。默认为False。
 - distributed_timeout_minutes: torch.distributed的timeout时间（单位为分钟），该参数失效，使用[基础参数](./命令行参数.md#基本参数)中的ddp_timeout控制，默认为300000分钟。
 
 **日志参数**:
@@ -249,13 +344,13 @@ I am a language model developed by swift, you can call me swift-robot. How can I
 **评估参数**:
 - 🔥eval_iters: 评估的迭代次数，默认为-1，根据验证数据集的数量设置合适的值。
   - 注意：若使用流式数据集，该值需要手动设置。
-- 🔥eval_interval: 评估的间隔（steps），默认为None，即设置为save_interval。
+- 🔥eval_interval: 评估的间隔（steps），即每训练多少steps进行评估，默认为None，即设置为save_interval。
 
 **fp8参数**:
 - fp8_format: 用于前向和反向传播中FP8张量的FP8格式方案。可选为'e4m3'，'hybrid'。默认为None。
 - fp8_recipe: 用于前向和反向传播中 FP8 张量的 FP8 算法方案。可选为'tensorwise', 'delayed', 'mxfp8', 'blockwise'。默认为'delayed'。
 - fp8_amax_history_len: 每个张量记录 amax 历史的步数。默认为1024。
-- fp8_amax_compute_algo: 用于根据历史记录计算 amax 的算法。可选为'most_recent','max'。默认为'max'。
+- fp8_amax_compute_algo: 用于根据历史记录计算 amax 的算法。可选为'most_recent', 'max'。默认为'max'。
 - fp8_param_gather: 保持计算参数为 fp8（不使用任何其他中间数据类型），并在 fp8 格式下执行参数的 all-gather 操作。默认为False。
 
 **混合精度参数**:
@@ -304,6 +399,7 @@ I am a language model developed by swift, you can call me swift-robot. How can I
 - moe_router_topk_scaling_factor: 默认为None。从config.json中读取。
 - moe_router_load_balancing_type: 确定路由器的负载均衡策略。可选项为"aux_loss"、"seq_aux_loss"、"sinkhorn"、"none"。默认值为 None。从config.json中读取。
 - 🔥expert_model_parallel_size: 专家并行数，默认为1。
+- 🔥expert_tensor_parallel_size: 专家TP并行度。默认值为None，即等于`--tensor_model_parallel_size` 的数值。
 - moe_token_dispatcher_type: 要使用的token分发器类型。可选选项包括 'allgather'、'alltoall'、'flex'和'alltoall_seq'。默认值为'alltoall'。
 - moe_enable_deepep: 实验性功能，启用DeepSeek/DeepEP以实现 MoE 模型中的高效令牌分发与组合。仅在设置`--moe_token_dispatcher_type flex`使用灵活令牌分发器时生效。
 - 🔥moe_grouped_gemm: 当每个rank包含多个专家时，通过在多个流中启动多个本地 GEMM 内核，利用 TransformerEngine中的GroupedLinear提高利用率和性能。默认为False。
@@ -321,6 +417,28 @@ I am a language model developed by swift, you can call me swift-robot. How can I
 - qk_head_dim: QK 投影中 head 的维度。 `q_head_dim = qk_head_dim + qk_pos_emb_head_dim`。默认为None，自动从config.json读取。
 - qk_pos_emb_head_dim: QK 投影中位置嵌入的维度。默认为None，自动从config.json读取。
 
+**Tuner参数**:
+- train_type: 可选为'lora'和'full'。默认为'full'。
+
+全参数训练：
+- freeze_parameters: 需要被冻结参数的前缀，默认为`[]`。
+- freeze_parameters_regex: 需要被冻结参数的正则表达式，默认为None。
+- freeze_parameters_ratio: 从下往上冻结的参数比例，默认为0。可设置为1将所有参数冻结，结合`trainable_parameters`设置可训练参数。该参数不兼容pp并行。
+- trainable_parameters: 额外可训练参数的前缀，默认为`[]`。
+- trainable_parameters_regex: 匹配额外可训练参数的正则表达式，默认为None。
+
+lora训练：
+- adapter_load: 加载adapter的权重路径，用于lora断点续训，默认为None。lora断点续训方式与全参数一致，请关注`--finetune`参数的含义。
+- 🔥target_modules: 指定lora模块的后缀, 默认为`['all-linear']`。
+- 🔥target_regex: 指定lora模块的regex表达式，默认为`None`。如果该值传入，则target_modules参数失效。
+- 🔥modules_to_save: 在已附加tuner后，额外指定一部分原模型模块参与训练和存储。默认为`[]`。
+- 🔥lora_rank: 默认为`8`。
+- 🔥lora_alpha: 默认为`32`。
+- lora_dropout: 默认为`0.05`。
+- lora_bias: 默认为`'none'`，可以选择的值: 'none'、'all'。如果你要将bias全都设置为可训练，你可以设置为`'all'`。
+- use_rslora: 默认为`False`，是否使用`RS-LoRA`。
+
+
 **DPO参数**:
 - ref_load: ref_model的加载路径。默认为None，即设置为`load`。
 - beta: 含义与[TRL](https://huggingface.co/docs/trl/main/en/dpo_trainer#trl.DPOConfig)相同。控制与参考模型偏差程度的参数。beta值越高，表示与参考模型的偏差越小。对于 IPO 损失函数 (loss_type="ipo")，beta是[论文](https://huggingface.co/papers/2310.12036)中所指的正则化参数。默认为0.1。
@@ -336,10 +454,16 @@ I am a language model developed by swift, you can call me swift-robot. How can I
 Megatron训练参数继承自Megatron参数和基本参数。基本参数的内容可以参考[这里](./命令行参数.md#基本参数)。此外还包括以下参数：
 
 - add_version: 在`save`上额外增加目录`'<版本号>-<时间戳>'`防止权重覆盖，默认为True。
+- padding_free: 将一个batch中的数据进行展平而避免数据padding，从而降低显存占用并加快训练。默认为True。
+  - 若要自定义attention_mask，你可以设置`--padding_free false`。
+- mlp_padding_free: 默认为False。用于padding_free设置为false时，对mlp进行padding_free优化。这可以在自定义attention_mask的同时，提升训练速度和减少显存占用。
 - 🔥packing: 是否使用序列packing，默认为False。当前支持`megatron pt/sft`。
-- 🔥packing_cache: 指定 packing 缓存目录。默认值为`None`，表示缓存将存储在环境变量 `$MODELSCOPE_CACHE`所指定的路径下。在跨节点使用 packing 功能时，需确保所有节点的 packing 缓存路径共享且一致。你可以通过设置`MODELSCOPE_CACHE`环境变量，或在命令行中添加 `--packing_cache <shared_path>`参数来实现这一要求。
-- 🔥streaming: 流式读取并处理数据集，默认False。通常在处理大型数据集时，设置为True。更多流式的参数查看命令行参数文档。
+- packing_cache: 指定 packing 缓存目录。默认值为`None`，表示缓存将存储在环境变量 `$MODELSCOPE_CACHE`所指定的路径下。在跨节点使用 packing 功能时，需确保所有节点的 packing 缓存路径共享且一致。你可以通过设置`MODELSCOPE_CACHE`环境变量，或在命令行中添加 `--packing_cache <shared_path>`参数来实现这一要求。
+  - 注意：该参数将在"ms-swift>=3.7"被移除。多机packing不再需要设置packing_cache。
+- streaming: 流式读取并处理数据集，默认False。通常在处理大型数据集时，设置为True。更多流式的参数查看命令行参数文档。
 - lazy_tokenize: 默认为False。若该参数设置为False，则在训练之前对所有的数据集样本进行tokenize（这可以避免在训练中出现报错）；设置为True，则在训练中对数据集进行tokenize（这可以节约内存）。
+- 🔥cached_dataset: 训练中使用缓存数据集（使用`swift export --to_cached_dataset true ...`命令产生），避免大型数据集训练时，tokenize占用gpu时。默认为`[]`。
+  - 注意：cached_dataset支持`--packing`，但不支持`--lazy_tokenize`和`--streaming`。
 - max_epochs: 训练到`max_epochs`时强制退出训练，并对权重进行验证和保存。该参数在使用流式数据集时很有用。默认为None。
   - 注意：如果你使用非流式数据集，该参数会为你自动计算train_iters，你不需要手动传入`train_iters`。
 

@@ -71,10 +71,12 @@ You can contact us and communicate with us by adding our group:
 - 🍉 **Toolbox Capabilities**: Offers not only training support for large models and multi-modal large models but also covers the entire process of inference, evaluation, quantization, and deployment.
 - **Inference Acceleration**: Supports inference acceleration engines like PyTorch, vLLM, SGLang, LmDeploy, and provides OpenAI API for accelerating inference, deployment, and evaluation modules.
 - **Model Evaluation**: Uses EvalScope as the evaluation backend and supports evaluation on 100+ datasets for both pure text and multi-modal models.
-- **Model Quantization**: Supports AWQ, GPTQ, and BNB quantized exports, with models that can use vLLM/SGLang/LmDeploy for inference acceleration and continue training.
+- **Model Quantization**: Supports AWQ, GPTQ, FP8, and BNB quantized exports, with models that can use vLLM/SGLang/LmDeploy for inference acceleration and continue training.
 
 
 ## 🎉 News
+- 🎁 2025.07.12: Deployment(pt/vLLM/SGLang) of Embedding models is supported, check [here](examples/deploy/embedding/client.py).
+- 🎁 2025.07.09: Megatron-SWIFT supports LoRA training. Compared to ms-swift, it achieves significant speedup on MoE models. Training scripts can be found [here](https://github.com/modelscope/ms-swift/blob/main/examples/train/megatron/lora).
 - 🎁 2025.06.23: Fine-tuning of reranker models is supported. Training scripts can be found here: [Reranker](https://github.com/modelscope/ms-swift/blob/main/examples/train/reranker/train_reranker.sh).
 - 🎁 2025.06.18: Support for accelerating the ms-swift [inference](https://github.com/modelscope/ms-swift/blob/main/examples/infer/sglang), deployment, evaluation, and UI modules using the [sglang](https://github.com/sgl-project/sglang) inference acceleration engine. Simply set `--infer_backend sglang` to enable it.
 - 🎁 2025.06.15: Support for GKD training on both pure text large models and multimodal models. Training scripts can be found here: [Pure Text](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/gkd), [Multimodal](https://github.com/modelscope/ms-swift/blob/main/examples/train/multimodal/rlhf/gkd).
@@ -116,20 +118,22 @@ pip install -e .
 
 Running Environment:
 
-|              | Range        | Recommended | Notes                                     |
-| ------------ |--------------| ----------- | ----------------------------------------- |
-| python       | >=3.9        | 3.10        |                                           |
-| cuda         |              | cuda12      | No need to install if using CPU, NPU, MPS |
-| torch        | >=2.0        |             |                                           |
-| transformers | >=4.33       | 4.51.3      |                                           |
-| modelscope   | >=1.23       |             |                                           |
-| peft | >=0.11,<0.16 | ||
-| trl | >=0.13,<0.19 | 0.18 |RLHF|
-| deepspeed    | >=0.14       | 0.16.9 | Training                                  |
-| vllm         | >=0.5.1      | 0.8.5.post1       | Inference/Deployment/Evaluation           |
-| sglang |     | 0.4.6.post5 | Inference/Deployment/Evaluation |
-| lmdeploy     | >=0.5,<0.9        | 0.8       | Inference/Deployment/Evaluation           |
-| evalscope | >=0.11       |  | Evaluation |
+|              | Range        | Recommended         | Notes                                     |
+|--------------|--------------|---------------------|-------------------------------------------|
+| python       | >=3.9        | 3.10                |                                           |
+| cuda         |              | cuda12              | No need to install if using CPU, NPU, MPS |
+| torch        | >=2.0        | 2.7.1               |                                           |
+| transformers | >=4.33       | 4.54.1              |                                           |
+| modelscope   | >=1.23       |                     |                                           |
+| peft         | >=0.11,<0.17 |                     |                                           |
+| flash_attn   |              | 2.7.4.post1/3.0.0b1 |                                           |
+| trl          | >=0.15,<0.21 | 0.20.0              | RLHF                                      |
+| deepspeed    | >=0.14       | 0.16.9              | Training                                  |
+| vllm         | >=0.5.1      | 0.10                | Inference/Deployment                      |
+| sglang       | >=0.4.6      | 0.4.9.post6         | Inference/Deployment                      |
+| lmdeploy     | >=0.5,<0.9   | 0.8                 | Inference/Deployment                      |
+| evalscope    | >=0.11       |                     | Evaluation                                |
+| gradio       |              | 5.32.1              | Web-UI/App                                |
 
 For more optional dependencies, you can refer to [here](https://github.com/modelscope/ms-swift/blob/main/requirements/install_all.sh).
 
@@ -198,7 +202,7 @@ swift infer \
     --stream true \
     --merge_lora true \
     --infer_backend vllm \
-    --max_model_len 8192 \
+    --vllm_max_model_len 8192 \
     --temperature 0 \
     --max_new_tokens 2048
 ```
