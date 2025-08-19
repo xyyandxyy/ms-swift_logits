@@ -26,12 +26,13 @@ from transformers import PreTrainedModel, TrainerCallback
 from transformers.trainer import Trainer
 from trl import GRPOTrainer as HFGRPOTrainer
 from trl.models import prepare_deepspeed
+from trl.trainer import grpo_trainer
 from trl.trainer.callbacks import SyncRefModelCallback
 from trl.trainer.grpo_trainer import RepeatSampler, nanmax, nanmin, nanstd
 from trl.trainer.utils import selective_log_softmax
 
 from swift.llm import (InferRequest, MultiModelKeys, RequestConfig, RolloutInferRequest, RowPreprocessor, Template,
-                       get_model_arch, to_device)
+                       to_device)
 from swift.llm.infer.protocol import ChatCompletionResponse
 from swift.llm.model.utils import get_llm_model
 from swift.llm.template.base import MaxLengthError
@@ -53,6 +54,7 @@ except ImportError:
 
 del HFGRPOTrainer.__init__
 del HFGRPOTrainer.log
+grpo_trainer.seed_worker = seed_worker  # fix transformers 4.51.3
 
 logger = get_logger()
 if is_wandb_available():
@@ -324,7 +326,7 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
         self.model_accepts_loss_kwargs = False
         self.padding_free = self.template.padding_free
         self.template.padding_free = False
-        self.template._packing = False
+        self.template.packing = False
         for i, reward_func in enumerate(self.reward_funcs):
             if isinstance(reward_func, PreTrainedModel):
                 if self.is_deepspeed_enabled:
@@ -429,7 +431,7 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
             # All in one
             return [[n for n, p in model.named_parameters() if 'ref_model' not in n]], [None]
 
-        model_arch = get_model_arch(model.model_meta.model_arch)
+        model_arch = model.model_meta.model_arch
         non_llm_parameters = []
         llm_embeds = []
         parameters = []
@@ -1303,6 +1305,11 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
         elif self.importance_sampling_level == 'sequence':
             log_importance_weights = (log_ratio * completion_mask).sum(-1) / completion_mask.sum(-1).clamp(min=1.0)
             log_importance_weights = log_importance_weights.unsqueeze(-1)
+        elif self.importance_sampling_level == 'sequence_token':
+            # GSPO-token: sg[si(θ)] * πθ(yi,t)/sg[πθ(yi,t)]
+            seq_level_log_weight = (log_ratio * completion_mask).sum(-1) / completion_mask.sum(-1).clamp(min=1.0)
+            seq_level_log_weight = seq_level_log_weight.detach().unsqueeze(-1)  # Stop gradient
+            log_importance_weights = per_token_logps - per_token_logps.detach() + seq_level_log_weight
         else:
             raise ValueError(
                 f"Unknown importance sampling level: {self.importance_sampling_level}. Possible values are 'token' "
@@ -1550,10 +1557,7 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
                 time.sleep(0.1)
         if self._queue.empty() and self.args.async_generate:
             self._prefetch(dataloader)
-        metric_key_prefix = kwargs['metric_key_prefix']
         output = super().evaluation_loop(dataloader, *args, **kwargs)
-        metrics = {f'{metric_key_prefix}_{key}': sum(val) / len(val) for key, val in self._metrics['eval'].items()}
-        output.metrics.update(metrics)
         self.eval_flag = True
         return output
 
@@ -1723,7 +1727,7 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
         if mode == 'eval':
             metrics = {f'eval_{key}': val for key, val in metrics.items()}
 
-        logs = {**logs, **metrics}
+        logs.update(metrics)
         if version.parse(transformers.__version__) >= version.parse('4.47.0.dev0'):
             super().log(logs, start_time)
         else:  # transformers<=4.46

@@ -71,6 +71,7 @@
 - **模型量化**：支持AWQ、GPTQ、FP8和BNB的量化导出，导出的模型支持使用vLLM/SGLang/LmDeploy推理加速，并支持继续训练。
 
 ## 🎉 新闻
+- 🎁 2025.08.12: 支持在SFT训练中使用[Dynamic Fine-Tuning](https://arxiv.org/abs/2508.05629)(DFT)，使用参数 `--enable_dft_loss true`。训练脚本参考[这里](https://github.com/modelscope/ms-swift/blob/main/examples/train/full/dft.sh)
 - 🎁 2025.07.12: 支持部署Embedding模型的部署(pt/vLLM/SGLang), 查看[这里](examples/deploy/embedding/client.py).
 - 🎁 2025.07.09: Megatron-SWIFT支持LoRA训练。相比ms-swift，在MoE模型提速显著。训练脚本参考[这里](https://github.com/modelscope/ms-swift/blob/main/examples/train/megatron/lora)。
 - 🎁 2025.06.23: 支持Reranker模型训练，训练脚本参考[这里](https://github.com/modelscope/ms-swift/blob/main/examples/train/reranker/train_reranker.sh)。
@@ -121,13 +122,13 @@ pip install -e .
 | torch        | >=2.0        | 2.7.1               |                    |
 | transformers | >=4.33       | 4.54.1              |                    |
 | modelscope   | >=1.23       |                     |                    |
-| peft         | >=0.11,<0.17 |                     |                    |
+| peft         | >=0.11,<0.18 |                     |                    |
 | flash_attn   |              | 2.7.4.post1/3.0.0b1 |                    |
 | trl          | >=0.15,<0.21 | 0.20.0              | RLHF               |
 | deepspeed    | >=0.14       | 0.16.9              | 训练                 |
 | vllm         | >=0.5.1      | 0.10                | 推理/部署              |
 | sglang       | >=0.4.6      | 0.4.9.post6         | 推理/部署              |
-| lmdeploy     | >=0.5,<0.9   | 0.8                 | 推理/部署              |
+| lmdeploy     | >=0.5   | 0.9.2                 | 推理/部署              |
 | evalscope    | >=0.11       |                     | 评测                 |
 | gradio       |              | 5.32.1              | Web-UI/App         |
 
