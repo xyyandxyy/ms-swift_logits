@@ -236,7 +236,7 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
             'prompt': deque(maxlen=args.generation_batch_size),
             'completion': deque(maxlen=args.generation_batch_size),
             'rewards': defaultdict(lambda: deque(maxlen=args.generation_batch_size)),
-            'videos': deque(maxlen=maxlen),
+            'videos': deque(maxlen=args.generation_batch_size),
             'advantages': deque(maxlen=args.generation_batch_size),
         }
         self.compute_entropy = self.args.log_entropy or self.top_entropy_quantile < 1.0
