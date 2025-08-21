@@ -1744,7 +1744,7 @@ class GRPOTrainer(RLHFTrainerMixin, SwiftMixin, HFGRPOTrainer):
             table = {
                 'step': [str(self.state.global_step)] * seen_nums,
                 'completion': list(self._logs['completion'])[:seen_nums],
-                'videos': self._textual_logs['videos'],
+                'videos': list(self._logs['videos'])[:seen_nums],
                 **{k: list(v)[:seen_nums]
                    for k, v in self._logs['rewards'].items()},
                 'advantage': list(self._logs['advantages'])[:seen_nums],
